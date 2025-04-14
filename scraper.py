@@ -166,27 +166,21 @@ def scrape_reviews(url):
         progress_bar.progress(75)
         status_text.markdown("🔄 **Processing reviews...**")
         
-        
         all_reviews = []
         reviews = driver.find_elements(By.CSS_SELECTOR, "div.jftiEf")
         
         for i, review in enumerate(reviews):
+            progress_bar.progress(75 + int((i/len(reviews)) * 25))
+            
             try:
-                # Extract rating (text format like "5/5")
-                rating_element = review.find_element(By.CSS_SELECTOR, "span.fzvQIb, span.kvMYJc, span.fontBodyMedium")  # Multiple possible selectors
-                rating = rating_element.text.split('/')[0]  # Gets just the numerator (e.g., "5" from "5/5")
-                
-                # Extract review text (with fallback)
-                text_element = review.find_elements(By.CSS_SELECTOR, "span.wiI7pd, span.review-full-text")
-                text = text_element[0].text if text_element else "No review text available"
+                rating = review.find_element(By.CSS_SELECTOR, "span.fzvQIb").text
+                text = review.find_element(By.CSS_SELECTOR, "span.wiI7pd").text if review.find_elements(By.CSS_SELECTOR, "span.wiI7pd") else ""
                 
                 all_reviews.append({
                     "Rating": rating,
                     "Review": text
                 })
-                
-            except Exception as e:
-                print(f"Skipped a review due to error: {str(e)}")
+            except:
                 continue
         return all_reviews
         
