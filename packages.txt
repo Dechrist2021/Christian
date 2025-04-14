@@ -1,0 +1,4 @@
+libxi6
+libgconf-2-4
+unzip
+xvfb
