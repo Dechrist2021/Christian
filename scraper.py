@@ -91,27 +91,21 @@ st.markdown("Extract all reviews from any Google Maps location with one click.")
 # Core Functionality (Your Working Code)
 # ==============================================
 def get_driver():
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
-    import os
-
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920x1080")
-
-    # Streamlit Cloud paths (from setup.sh)
+    
     if os.path.exists('/usr/bin/chromedriver'):
+        # Cloud configuration
         chrome_options.binary_location = '/usr/bin/google-chrome'
         service = Service('/usr/bin/chromedriver')
     else:
-        # Local fallback (Windows/Mac)
+        # Local configuration
         from webdriver_manager.chrome import ChromeDriverManager
         service = Service(ChromeDriverManager().install())
-
+    
     return webdriver.Chrome(service=service, options=chrome_options)
 
 if 'reviews' not in st.session_state:
