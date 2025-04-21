@@ -118,7 +118,7 @@ if 'reviews' not in st.session_state:
     st.session_state.reviews = None
 
 def scrape_reviews(url):
-    driver = get_driver()  # This now handles both local and cloud config
+    driver = get_driver()
     
     try:
         # Update progress
@@ -134,6 +134,7 @@ def scrape_reviews(url):
             ).click()
             progress_bar.progress(10)
             status_text.markdown("✅ **Cookies accepted**")
+            time.sleep(1)  # Small delay after clicking
         except:
             pass
         
@@ -173,15 +174,43 @@ def scrape_reviews(url):
             progress_bar.progress(75 + int((i/len(reviews)) * 25))
             
             try:
-                rating = review.find_element(By.CSS_SELECTOR, "span.fzvQIb").text
-                text = review.find_element(By.CSS_SELECTOR, "span.wiI7pd").text if review.find_elements(By.CSS_SELECTOR, "span.wiI7pd") else ""
+                # More robust rating extraction
+                rating = "N/A"
                 
-                all_reviews.append({
-                    "Rating": rating,
-                    "Review": text
-                })
-            except:
+                # Try getting star rating first
+                try:
+                    rating_element = review.find_element(By.CSS_SELECTOR, "span.fzvQIb")
+                    aria_label = rating_element.get_attribute('aria-label')
+                    if aria_label:
+                        # Extract just the number (e.g., "3 stars" -> "3")
+                        rating = aria_label.split(' ')[0]
+                except:
+                    pass
+                
+                # If no star rating found, try fraction format (like "5/5")
+                if rating == "N/A":
+                    try:
+                        rating_div = review.find_element(By.CSS_SELECTOR, "div.fontBodySmall")
+                        rating_text = rating_div.text
+                        if '/' in rating_text:
+                            rating = rating_text.split('/')[0].strip()
+                    except:
+                        pass
+                
+                # Extract review text
+                text_elements = review.find_elements(By.CSS_SELECTOR, "span.wiI7pd")
+                text = text_elements[0].text if text_elements else ""
+                
+                # Only add if we have valid data
+                if rating != "N/A" or text.strip():
+                    all_reviews.append({
+                        "Rating": rating,
+                        "Review": text
+                    })
+            except Exception as e:
+                print(f"Skipping review due to error: {str(e)}")
                 continue
+                
         return all_reviews
         
     finally:
