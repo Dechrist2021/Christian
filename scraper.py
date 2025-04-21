@@ -121,108 +121,132 @@ def scrape_reviews(url):
     driver = get_driver()
     
     try:
-        # Update progress
+        # Initial setup
         progress_bar.progress(5)
         status_text.markdown("🚀 **Launching browser...**")
-        
         driver.get(url)
-        
-        # Accept cookies
+        time.sleep(3)  # Initial load wait
+
+        # Accept cookies (multiple possible selectors)
         try:
-            WebDriverWait(driver, 3).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "[aria-label*='Accept all']"))
-            ).click()
-            progress_bar.progress(10)
-            status_text.markdown("✅ **Cookies accepted**")
-            time.sleep(1)  # Small delay after clicking
+            cookie_buttons = [
+                "[aria-label*='Accept all']",
+                "[aria-label*='Accept']",
+                "button:contains('Accept')",
+                "button:contains('I agree')"
+            ]
+            for selector in cookie_buttons:
+                try:
+                    WebDriverWait(driver, 2).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                    ).click()
+                    progress_bar.progress(10)
+                    status_text.markdown("✅ **Cookies accepted**")
+                    time.sleep(1)
+                    break
+                except:
+                    continue
         except:
             pass
-        
-        # Scroll to load reviews
+
+        # Find reviews section
         progress_bar.progress(15)
         status_text.markdown("🔍 **Finding reviews section...**")
-        
-        review_section = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div.m6QErb.DxyBCb.kA9KIf.dS8AEf"))
-        )
-        
-        last_height = 0
+        try:
+            review_section = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-review-id]"))
+        except:
+            st.error("Could not find reviews section. Please make sure this is a valid Google Maps place page with reviews.")
+            return []
+
+        # Scroll to load all reviews
+        last_height = driver.execute_script("return arguments[0].scrollHeight", review_section)
         scroll_attempt = 0
         
-        while scroll_attempt < 30:
+        while scroll_attempt < 50:
             driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", review_section)
-            time.sleep(2)
+            time.sleep(2.5)  # Increased wait time for loading
             
-            scroll_progress = 15 + int((scroll_attempt/30) * 55)
+            # Update progress
+            scroll_progress = min(15 + int((scroll_attempt/50) * 55, 70)
             progress_bar.progress(scroll_progress)
-            status_text.markdown(f"📜 **Loading reviews...** ({len(driver.find_elements(By.CSS_SELECTOR, 'div.jftiEf'))} found)")
+            
+            current_reviews = len(driver.find_elements(By.CSS_SELECTOR, 'div[data-review-id]'))
+            status_text.markdown(f"📜 **Loaded {current_reviews} reviews...**")
             
             new_height = driver.execute_script("return arguments[0].scrollHeight", review_section)
             if new_height == last_height:
                 break
             last_height = new_height
             scroll_attempt += 1
-        
+
         # Extract reviews
         progress_bar.progress(75)
         status_text.markdown("🔄 **Processing reviews...**")
-        
         all_reviews = []
-        reviews = driver.find_elements(By.CSS_SELECTOR, "div.jftiEf")
+        reviews = driver.find_elements(By.CSS_SELECTOR, "div[data-review-id]")
         
         for i, review in enumerate(reviews):
-            progress_bar.progress(75 + int((i/len(reviews)) * 25))
-            
             try:
-                # More robust rating extraction
+                # RATING EXTRACTION (fraction format)
                 rating = "N/A"
-                
-                # Try getting star rating first
                 try:
-                    rating_element = review.find_element(By.CSS_SELECTOR, "span.fzvQIb")
-                    aria_label = rating_element.get_attribute('aria-label')
-                    if aria_label:
-                        # Extract just the number (e.g., "3 stars" -> "3")
-                        rating = aria_label.split(' ')[0]
+                    # Look for the fraction format (like "5/5")
+                    rating_div = review.find_element(By.CSS_SELECTOR, "div.fontBodySmall")
+                    rating_text = rating_div.text.strip()
+                    if '/' in rating_text:
+                        rating = rating_text.split('/')[0].strip()
                 except:
                     pass
                 
-                # If no star rating found, try fraction format (like "5/5")
-                if rating == "N/A":
-                    try:
-                        rating_div = review.find_element(By.CSS_SELECTOR, "div.fontBodySmall")
-                        rating_text = rating_div.text
-                        if '/' in rating_text:
-                            rating = rating_text.split('/')[0].strip()
-                    except:
-                        pass
+                # REVIEW TEXT EXTRACTION
+                text = ""
+                try:
+                    text_el = review.find_element(By.CSS_SELECTOR, "span.wiI7pd")
+                    text = text_el.text if text_el else ""
+                except:
+                    pass
                 
-                # Extract review text
-                text_elements = review.find_elements(By.CSS_SELECTOR, "span.wiI7pd")
-                text = text_elements[0].text if text_elements else ""
-                
-                # Only add if we have valid data
+                # Only add if we have either rating or text
                 if rating != "N/A" or text.strip():
                     all_reviews.append({
                         "Rating": rating,
                         "Review": text
                     })
+                    
             except Exception as e:
-                print(f"Skipping review due to error: {str(e)}")
+                print(f"Skipped review due to error: {str(e)}")
                 continue
-                
+            
+            # Update progress
+            if reviews:
+                progress_bar.progress(75 + int((i/len(reviews)) * 25))
+
         return all_reviews
-        
+
+    except Exception as e:
+        st.error(f"Scraping failed: {str(e)}")
+        return []
     finally:
-        driver.quit()
+        try:
+            driver.quit()
+        except:
+            pass
 
 def get_download_link(df):
-    # Ensure rating column is numeric for better sorting
-    df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce').fillna(0)
-    csv = df.to_csv(index=False, encoding='utf-8-sig')  # utf-8-sig for Excel compatibility
+    # Convert ratings to numeric (keeping "N/A" as NaN)
+    df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce')
+    
+    # Generate CSV (NaN will appear as empty in CSV)
+    csv = df.to_csv(index=False, encoding='utf-8-sig')
     b64 = base64.b64encode(csv.encode('utf-8-sig')).decode()
     filename = f"google_reviews_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-    return f'<a class="download-link" href="data:file/csv;base64,{b64}" download="{filename}">💾 Download CSV ({len(df)} reviews)</a>'
+    
+    return f'''
+    <a class="download-link" href="data:file/csv;base64,{b64}" download="{filename}">
+        💾 Download CSV ({len(df)} reviews)
+    </a>
+    '''
 # ==============================================
 # Beautiful UI Components
 # ==============================================
