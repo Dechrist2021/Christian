@@ -168,7 +168,7 @@ def scrape_reviews(url):
             time.sleep(2.5)  # Increased wait time for loading
             
             # Update progress
-            scroll_progress = min(15 + int((scroll_attempt/50) * 55, 70)
+            scroll_progress = min(15 + int((scroll_attempt/50) * 55, 70))
             progress_bar.progress(scroll_progress)
             
             current_reviews = len(driver.find_elements(By.CSS_SELECTOR, 'div[data-review-id]'))
