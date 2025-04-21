@@ -83,7 +83,7 @@ st.markdown("""
 # ==============================================
 # App Header
 # ==============================================
-st.image("https://maps.gstatic.com/tactile/images/maps_logo_grayscale-4b0a256a.png", width=150)
+#st.image("https://maps.gstatic.com/tactile/images/maps_logo_grayscale-4b0a256a.png", width=150)
 st.title("🗺️ Hotels Reviews Scraper")
 st.markdown("Extract all reviews from any Google Maps location with one click.")
 
@@ -91,159 +91,109 @@ st.markdown("Extract all reviews from any Google Maps location with one click.")
 # Core Functionality (Your Working Code)
 # ==============================================
 def get_driver():
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    import os
+
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920x1080")
-    
-    # Cloud configuration (only)
-    chrome_options.binary_location = "/usr/bin/google-chrome"
-    service = Service("/usr/bin/chromedriver")
-    
+
+    # Streamlit Cloud paths (from setup.sh)
+    if os.path.exists('/usr/bin/chromedriver'):
+        chrome_options.binary_location = '/usr/bin/google-chrome'
+        service = Service('/usr/bin/chromedriver')
+    else:
+        # Local fallback (Windows/Mac)
+        from webdriver_manager.chrome import ChromeDriverManager
+        service = Service(ChromeDriverManager().install())
+
     return webdriver.Chrome(service=service, options=chrome_options)
 
 if 'reviews' not in st.session_state:
     st.session_state.reviews = None
 
 def scrape_reviews(url):
-    driver = get_driver()
+    driver = get_driver()  # This now handles both local and cloud config
+    
     try:
-        # Add this verification
-        driver.get("about:blank")
-        if "about:blank" not in driver.current_url:
-            st.error("Browser failed to initialize")
-            return []
-    except:
-        pass
-        
-    try:
-        # Initial setup
+        # Update progress
         progress_bar.progress(5)
         status_text.markdown("🚀 **Launching browser...**")
+        
         driver.get(url)
-        time.sleep(3)  # Initial load wait
-
-        # Accept cookies (multiple possible selectors)
+        
+        # Accept cookies
         try:
-            cookie_buttons = [
-                "[aria-label*='Accept all']",
-                "[aria-label*='Accept']",
-                "button:contains('Accept')",
-                "button:contains('I agree')"
-            ]
-            for selector in cookie_buttons:
-                try:
-                    WebDriverWait(driver, 2).until(
-                        EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
-                    ).click()
-                    progress_bar.progress(10)
-                    status_text.markdown("✅ **Cookies accepted**")
-                    time.sleep(1)
-                    break
-                except:
-                    continue
+            WebDriverWait(driver, 3).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "[aria-label*='Accept all']"))
+            ).click()
+            progress_bar.progress(10)
+            status_text.markdown("✅ **Cookies accepted**")
         except:
             pass
-
-        # Find reviews section
+        
+        # Scroll to load reviews
         progress_bar.progress(15)
         status_text.markdown("🔍 **Finding reviews section...**")
-        try:
-            review_section = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-review-id]")))
-        except:
-            st.error("Could not find reviews section. Please make sure this is a valid Google Maps place page with reviews.")
-            return []
-
-        # Scroll to load all reviews
-        last_height = driver.execute_script("return arguments[0].scrollHeight", review_section)
+        
+        review_section = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.m6QErb.DxyBCb.kA9KIf.dS8AEf"))
+        )
+        
+        last_height = 0
         scroll_attempt = 0
         
-        while scroll_attempt < 50:
+        while scroll_attempt < 30:
             driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", review_section)
-            time.sleep(2.5)  # Increased wait time for loading
+            time.sleep(2)
             
-            # Update progress
-            scroll_progress = min(15 + int((scroll_attempt/50) * 55, 70))
+            scroll_progress = 15 + int((scroll_attempt/30) * 55)
             progress_bar.progress(scroll_progress)
-            
-            current_reviews = len(driver.find_elements(By.CSS_SELECTOR, 'div[data-review-id]'))
-            status_text.markdown(f"📜 **Loaded {current_reviews} reviews...**")
+            status_text.markdown(f"📜 **Loading reviews...** ({len(driver.find_elements(By.CSS_SELECTOR, 'div.jftiEf'))} found)")
             
             new_height = driver.execute_script("return arguments[0].scrollHeight", review_section)
             if new_height == last_height:
                 break
             last_height = new_height
             scroll_attempt += 1
-
+        
         # Extract reviews
         progress_bar.progress(75)
         status_text.markdown("🔄 **Processing reviews...**")
+        
         all_reviews = []
-        reviews = driver.find_elements(By.CSS_SELECTOR, "div[data-review-id]")
+        reviews = driver.find_elements(By.CSS_SELECTOR, "div.jftiEf")
         
         for i, review in enumerate(reviews):
-            try:
-                # RATING EXTRACTION (fraction format)
-                rating = "N/A"
-                try:
-                    # Look for the fraction format (like "5/5")
-                    rating_div = review.find_element(By.CSS_SELECTOR, "div.fontBodySmall")
-                    rating_text = rating_div.text.strip()
-                    if '/' in rating_text:
-                        rating = rating_text.split('/')[0].strip()
-                except:
-                    pass
-                
-                # REVIEW TEXT EXTRACTION
-                text = ""
-                try:
-                    text_el = review.find_element(By.CSS_SELECTOR, "span.wiI7pd")
-                    text = text_el.text if text_el else ""
-                except:
-                    pass
-                
-                # Only add if we have either rating or text
-                if rating != "N/A" or text.strip():
-                    all_reviews.append({
-                        "Rating": rating,
-                        "Review": text
-                    })
-                    
-            except Exception as e:
-                print(f"Skipped review due to error: {str(e)}")
-                continue
+            progress_bar.progress(75 + int((i/len(reviews)) * 25))
             
-            # Update progress
-            if reviews:
-                progress_bar.progress(75 + int((i/len(reviews)) * 25))
-
+            try:
+                rating = review.find_element(By.CSS_SELECTOR, "span.fzvQIb").text
+                text = review.find_element(By.CSS_SELECTOR, "span.wiI7pd").text if review.find_elements(By.CSS_SELECTOR, "span.wiI7pd") else ""
+                
+                all_reviews.append({
+                    "Rating": rating,
+                    "Review": text
+                })
+            except:
+                continue
+        
         return all_reviews
-
-    except Exception as e:
-        st.error(f"Scraping failed: {str(e)}")
-        return []
+        
     finally:
-        try:
-            driver.quit()
-        except:
-            pass
+        driver.quit()
 
 def get_download_link(df):
-    # Convert ratings to numeric (keeping "N/A" as NaN)
-    df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce')
-    
-    # Generate CSV (NaN will appear as empty in CSV)
-    csv = df.to_csv(index=False, encoding='utf-8-sig')
-    b64 = base64.b64encode(csv.encode('utf-8-sig')).decode()
-    filename = f"google_reviews_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-    
-    return f'''
-    <a class="download-link" href="data:file/csv;base64,{b64}" download="{filename}">
-        💾 Download CSV ({len(df)} reviews)
-    </a>
-    '''
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    filename = f"google_reviews_{datetime.now().strftime('%Y%m%d')}.csv"
+    return f'<a class="download-link" href="data:file/csv;base64,{b64}" download="{filename}">💾 Download CSV ({len(df)} reviews)</a>'
+
 # ==============================================
 # Beautiful UI Components
 # ==============================================
