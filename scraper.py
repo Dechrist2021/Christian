@@ -97,14 +97,9 @@ def get_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920x1080")
     
-    if os.path.exists('/usr/bin/chromedriver'):
-        # Cloud configuration
-        chrome_options.binary_location = '/usr/bin/google-chrome'
-        service = Service('/usr/bin/chromedriver')
-    else:
-        # Local configuration
-        from webdriver_manager.chrome import ChromeDriverManager
-        service = Service(ChromeDriverManager().install())
+    # Cloud configuration (only)
+    chrome_options.binary_location = "/usr/bin/google-chrome"
+    service = Service("/usr/bin/chromedriver")
     
     return webdriver.Chrome(service=service, options=chrome_options)
 
