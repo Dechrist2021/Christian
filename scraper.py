@@ -154,7 +154,7 @@ def scrape_reviews(url):
         status_text.markdown("🔍 **Finding reviews section...**")
         try:
             review_section = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-review-id]"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-review-id]")))
         except:
             st.error("Could not find reviews section. Please make sure this is a valid Google Maps place page with reviews.")
             return []
