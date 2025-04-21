@@ -217,11 +217,12 @@ def scrape_reviews(url):
         driver.quit()
 
 def get_download_link(df):
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    filename = f"google_reviews_{datetime.now().strftime('%Y%m%d')}.csv"
+    # Ensure rating column is numeric for better sorting
+    df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce').fillna(0)
+    csv = df.to_csv(index=False, encoding='utf-8-sig')  # utf-8-sig for Excel compatibility
+    b64 = base64.b64encode(csv.encode('utf-8-sig')).decode()
+    filename = f"google_reviews_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
     return f'<a class="download-link" href="data:file/csv;base64,{b64}" download="{filename}">💾 Download CSV ({len(df)} reviews)</a>'
-
 # ==============================================
 # Beautiful UI Components
 # ==============================================
