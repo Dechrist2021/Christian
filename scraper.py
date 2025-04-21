@@ -114,6 +114,9 @@ def scrape_reviews(url):
         if "about:blank" not in driver.current_url:
             st.error("Browser failed to initialize")
             return []
+    except:
+        pass
+        
     try:
         # Initial setup
         progress_bar.progress(5)
