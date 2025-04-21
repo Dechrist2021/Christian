@@ -108,7 +108,12 @@ if 'reviews' not in st.session_state:
 
 def scrape_reviews(url):
     driver = get_driver()
-    
+    try:
+        # Add this verification
+        driver.get("about:blank")
+        if "about:blank" not in driver.current_url:
+            st.error("Browser failed to initialize")
+            return []
     try:
         # Initial setup
         progress_bar.progress(5)
